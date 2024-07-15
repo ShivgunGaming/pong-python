@@ -14,8 +14,6 @@ PADDLE_SPEED = 5
 BALL_SIZE = 20
 BALL_SPEED_X = 5
 BALL_SPEED_Y = 5
-POWERUP_SIZE = 20
-POWERUP_DURATION = 5000  # milliseconds
 
 # Set up the screen
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -37,15 +35,16 @@ player_score = 0
 opponent_score = 0
 font = pygame.font.Font(None, 36)
 
+# Power-ups
+power_up_active = False
+power_up = pygame.Rect(random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50), 20, 20)
+power_up_effect_time = 5000  # 5 seconds
+power_up_end_time = 0
+
 # Game states
 start_screen = True
 game_over = False
 paused = False
-
-# Power-up variables
-powerup = None
-powerup_active = False
-powerup_start_time = 0
 
 # AI function for the opponent paddle
 def ai_opponent():
@@ -82,6 +81,27 @@ def draw_pause_screen():
     pause_text = font.render("Paused", True, WHITE)
     screen.blit(pause_text, (WIDTH // 2 - pause_text.get_width() // 2, HEIGHT // 2))
     pygame.display.flip()
+
+# Activate power-up
+def activate_power_up():
+    global power_up_active, power_up_end_time
+    power_up_active = True
+    power_up_end_time = pygame.time.get_ticks() + power_up_effect_time
+    if random.choice([True, False]):
+        # Increase player paddle speed
+        global PADDLE_SPEED
+        PADDLE_SPEED = 10
+    else:
+        # Decrease opponent paddle speed
+        global opponent_paddle_speed
+        opponent_paddle_speed = 2
+
+# Deactivate power-up
+def deactivate_power_up():
+    global power_up_active, PADDLE_SPEED, opponent_paddle_speed
+    power_up_active = False
+    PADDLE_SPEED = 5
+    opponent_paddle_speed = PADDLE_SPEED
 
 # Main game loop
 running = True
@@ -125,14 +145,22 @@ while running:
 
     screen.fill(BLACK)
 
-    # Move player paddle with mouse
-    mouse_y = pygame.mouse.get_pos()[1]
-    player_paddle.y = mouse_y - PADDLE_HEIGHT // 2
-    # Ensure the paddle doesn't move out of the screen
-    if player_paddle.top < 0:
-        player_paddle.top = 0
-    if player_paddle.bottom > HEIGHT:
-        player_paddle.bottom = HEIGHT
+    # Move player paddle with keyboard
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_UP] and player_paddle.top > 0:
+        player_paddle.y -= PADDLE_SPEED
+    if keys[pygame.K_DOWN] and player_paddle.bottom < HEIGHT:
+        player_paddle.y += PADDLE_SPEED
+
+    # Mobile touch control
+    if pygame.mouse.get_pressed()[0]:
+        mouse_y = pygame.mouse.get_pos()[1]
+        player_paddle.y = mouse_y - PADDLE_HEIGHT // 2
+        # Ensure the paddle doesn't move out of the screen
+        if player_paddle.top < 0:
+            player_paddle.top = 0
+        if player_paddle.bottom > HEIGHT:
+            player_paddle.bottom = HEIGHT
 
     # Call AI function for opponent paddle
     ai_opponent()
@@ -146,10 +174,7 @@ while running:
         ball_speed_y *= -1
 
     # Ball collision with paddles
-    if ball.colliderect(player_paddle):
-        ball_speed_x = -ball_speed_x
-        ball_speed_y += random.uniform(-1, 1)
-    if ball.colliderect(opponent_paddle):
+    if ball.colliderect(player_paddle) or ball.colliderect(opponent_paddle):
         ball_speed_x = -ball_speed_x
         ball_speed_y += random.uniform(-1, 1)
 
@@ -165,6 +190,18 @@ while running:
         ball_speed_x = BALL_SPEED_X * random.choice((1, -1))
         ball_speed_y = BALL_SPEED_Y * random.choice((1, -1))
 
+    # Draw power-up
+    if not power_up_active and random.randint(0, 1000) < 5:
+        power_up = pygame.Rect(random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50), 20, 20)
+    pygame.draw.rect(screen, (0, 255, 0), power_up)
+    if ball.colliderect(power_up):
+        activate_power_up()
+        power_up.x = -100  # Move off-screen
+
+    # Deactivate power-up after time
+    if power_up_active and pygame.time.get_ticks() > power_up_end_time:
+        deactivate_power_up()
+
     # Draw paddles, ball, and scores
     pygame.draw.rect(screen, WHITE, player_paddle)
     pygame.draw.rect(screen, WHITE, opponent_paddle)
@@ -173,26 +210,6 @@ while running:
     opponent_text = font.render(str(opponent_score), True, WHITE)
     screen.blit(player_text, (WIDTH // 4, 50))
     screen.blit(opponent_text, (WIDTH // 4 * 3, 50))
-
-    # Power-up generation
-    if not powerup and random.randint(1, 1000) <= 2:  # Randomly generate power-up
-        powerup = pygame.Rect(random.randint(0, WIDTH - POWERUP_SIZE), random.randint(0, HEIGHT - POWERUP_SIZE), POWERUP_SIZE, POWERUP_SIZE)
-
-    # Power-up collision
-    if powerup and ball.colliderect(powerup):
-        powerup_active = True
-        powerup_start_time = pygame.time.get_ticks()
-        PADDLE_SPEED *= 2  # Example power-up effect
-        powerup = None
-
-    # Power-up duration check
-    if powerup_active and pygame.time.get_ticks() - powerup_start_time > POWERUP_DURATION:
-        powerup_active = False
-        PADDLE_SPEED //= 2  # Revert power-up effect
-
-    # Draw power-up
-    if powerup:
-        pygame.draw.rect(screen, (0, 255, 0), powerup)
 
     # Update the display
     pygame.display.flip()
